@@ -52,21 +52,30 @@ def list_sports(active_only: bool = True) -> list[dict]:
     sports = _get("/sports")
     return [s for s in sports if s.get("active")] if active_only else sports
 
+def get_odds(
+       sport_key: str,
+       markets: list[str] | None = None,
+       regions: str = "us",
+   ) -> list[dict]:
+       """Fetch live odds for the given sport, markets, and regions.
+
+       Quota cost: len(markets) × number of regions per call.
+       Defaults to ['h2h'] (1 credit per region).
+       """
+       if markets is None:
+           markets = ["h2h"]
+       return _get(
+           f"/sports/{sport_key}/odds",
+           params={
+               "regions": regions,
+               "markets": ",".join(markets),
+               "oddsFormat": "american",
+           },
+       )
 
 def get_moneyline_odds(sport_key: str, regions: str = "us") -> list[dict]:
-    """Fetch live moneyline odds for every active event in a sport.
-
-    One quota unit regardless of how many events come back.
-    """
-    return _get(
-        f"/sports/{sport_key}/odds",
-        params={
-            "regions": regions,
-            "markets": "h2h",
-            "oddsFormat": "american",
-        },
-    )
-
+       """Convenience wrapper: fetch h2h only. 1 credit per region."""
+       return get_odds(sport_key, markets=["h2h"], regions=regions)
 
 def consensus_moneyline(event: dict) -> dict[str, float]:
     """Median moneyline per outcome across all bookmakers in the event."""
