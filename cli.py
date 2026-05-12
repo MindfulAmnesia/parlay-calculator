@@ -11,47 +11,28 @@ Press Return on a blank line to compute the joint probability.
 
 # ── Imports ───────────────────────────────────────────────────────────────────
 
-# argparse lets us accept command-line arguments like --book and --offline.
-import argparse
-# json lets us read/write JSON files (a common data format that looks like Python dicts).
-import json
-# sys gives us access to system-level functions, like sys.exit() which stops the program.
-import sys
-# Path is a modern way to work with file paths — it's safer and cleaner than plain strings.
-from pathlib import Path
+import argparse # argparse lets us accept command-line arguments like --book and --offline.
+import json # json lets us read/write JSON files (a common data format that looks like Python dicts).
+import sys # sys gives us access to system-level functions, like sys.exit() which stops the program.
+from pathlib import Path # Path is a modern way to work with file paths — it's safer and cleaner than plain strings.
+
 
 # Import specific functions from our own modules (files in this project).
-from odds_client import consensus_moneyline, get_moneyline_odds
+from odds_client import book_moneyline, consensus_moneyline, get_moneyline_odds
 from parlay import (
-    Leg,
-    american_to_implied_probability,
-    devig_two_way,
-    implied_to_american,
-    parlay_probability,
-)
+                    Leg,
+                    american_to_implied_probability,
+                    devig_two_way,
+                    implied_to_american,
+                    parlay_probability,
+                    )
 
 # Path("data") / "sample_odds.json" builds a file path: data/sample_odds.json
 # The / operator on Path objects joins folders and filenames together.
+
 CACHE_FILE = Path("data") / "sample_odds.json"
 
-
-def book_moneyline(event: dict, book_key: str) -> dict[str, int]:
-    """Return {team_name: american_odds} for a specific bookmaker."""
-    # Loop through every bookmaker attached to this event.
-    for book in event.get("bookmakers", []):
-        # Skip books that don't match the one the user asked for.
-        if book.get("key") != book_key:
-            continue
-        # Loop through each market type (e.g. h2h, spreads).
-        for market in book.get("markets", []):
-            # We only want head-to-head (moneyline) odds here.
-            if market.get("key") != "h2h":
-                continue
-            # Build a dict mapping team name → integer odds for every outcome.
-            return {o["name"]: int(o["price"]) for o in market.get("outcomes", [])}
-    # If nothing matched, return an empty dict instead of crashing.
-    return {}
-
+# Return {team_name: american_odds} for a specific bookmaker
 
 def get_prices(event: dict, book_key: str | None) -> dict[str, int]:
     """Get prices either from a specific book or aggregated consensus."""
@@ -61,7 +42,6 @@ def get_prices(event: dict, book_key: str | None) -> dict[str, int]:
     # No specific book requested — use the median across all books.
     # The dict comprehension converts each price to an int (whole number).
     return {name: int(price) for name, price in consensus_moneyline(event).items()}
-
 
 def load_events(sport_key: str, offline: bool) -> list[dict]:
     """Either fetch fresh from the API or load cached JSON."""
@@ -76,7 +56,6 @@ def load_events(sport_key: str, offline: bool) -> list[dict]:
         return json.loads(CACHE_FILE.read_text())
     # Online mode: fetch fresh data from the Odds API.
     return get_moneyline_odds(sport_key)
-
 
 def main() -> None:
     # argparse reads the words typed after "python cli.py" and turns them into
