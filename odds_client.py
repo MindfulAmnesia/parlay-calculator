@@ -1,5 +1,9 @@
 """
 odds_client.py — Thin client for The Odds API.
+
+Fetches live odds for a given sport. The /sports endpoint is free;
+the /odds endpoint counts against your monthly quota (500 on the free tier).
+
 Reference: https://the-odds-api.com/liveapi/guides/v4/
 """
 
@@ -15,8 +19,10 @@ load_dotenv()
 API_KEY = os.getenv("ODDS_API_KEY")
 BASE_URL = "https://api.the-odds-api.com/v4"
 
+
 class OddsAPIError(Exception):
     """Raised when the API returns an error or unexpected response."""
+
 
 def _get(path: str, params: dict[str, Any] | None = None) -> Any:
     """Perform a GET against the API and return parsed JSON.
@@ -38,14 +44,12 @@ def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         print(f"[quota] used={used}  remaining={remaining}")
 
     if response.status_code != 200:
-        raise OddsAPIError(
-            f"{response.status_code} {response.reason}: {response.text[:200]}"
-        )
+        raise OddsAPIError(f"{response.status_code} {response.reason}: {response.text[:200]}")
     return response.json()
 
 
 def list_sports(active_only: bool = True) -> list[dict]:
-    """Return the catalog of sports the API tracks. Free — no quota use."""
+    """Return the catalog of sports the API tracks. Free, no quota use."""
     sports = _get("/sports")
     return [s for s in sports if s.get("active")] if active_only else sports
 
@@ -57,7 +61,7 @@ def get_odds(
 ) -> list[dict]:
     """Fetch live odds for the given sport, markets, and regions.
 
-    Quota cost: len(markets) × number of regions per call.
+    Quota cost: len(markets) * number of regions per call.
     Defaults to ['h2h'] (1 credit per region).
     """
     if markets is None:
@@ -88,16 +92,6 @@ def book_moneyline(event: dict, book_key: str) -> dict[str, int]:
             return {o["name"]: int(o["price"]) for o in market.get("outcomes", [])}
     return {}
 
-def book_moneyline(event: dict, book_key: str) -> dict[str, int]:
-    """Return {team_name: american_odds} for one specific bookmaker."""
-    for book in event.get("bookmakers", []):
-        if book.get("key") != book_key:
-            continue
-        for market in book.get("markets", []):
-            if market.get("key") != "h2h":
-                continue
-            return {o["name"]: int(o["price"]) for o in market.get("outcomes", [])}
-    return {}
 
 def consensus_moneyline(event: dict) -> dict[str, float]:
     """Median moneyline per outcome across all bookmakers in the event."""

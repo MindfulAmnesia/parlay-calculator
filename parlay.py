@@ -24,6 +24,7 @@ from dataclasses import dataclass
 @dataclass
 class Leg:
     """A single leg of a parlay."""
+
     description: str
     american_odds: int
 
@@ -72,8 +73,8 @@ def parlay_probability(legs: list[Leg]) -> float:
 def main() -> None:
     """Demo using John's three-leg parlay from the project brief."""
     johns_parlay = [
-        Leg("Team A to win",                       -200),
-        Leg("Player A to score a touchdown",       +250),
+        Leg("Team A to win", -200),
+        Leg("Player A to score a touchdown", +250),
         Leg("Player B to catch at least 5 passes", +240),
     ]
 
@@ -87,7 +88,7 @@ def main() -> None:
     joint = parlay_probability(johns_parlay)
     payout_odds = implied_to_american(joint)
     print("-" * 65)
-    print(f"Joint probability (independence assumed): {joint:.4f}  ({joint*100:.2f}%)")
+    print(f"Joint probability (independence assumed): {joint:.4f}  ({joint * 100:.2f}%)")
     print(f"Equivalent American odds:                 {payout_odds:+d}")
 
 

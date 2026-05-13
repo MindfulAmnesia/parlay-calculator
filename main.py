@@ -32,8 +32,10 @@ app = FastAPI(
 
 # ---------- Pydantic models for /parlay ----------
 
+
 class ParlayLeg(BaseModel):
     """One leg of a parlay."""
+
     description: str = Field(..., description="Human-readable name, e.g. 'Yankees ML'")
     american_odds: int = Field(..., description="American moneyline, e.g. -150 or +250")
     opposite_odds: int | None = Field(
@@ -44,11 +46,13 @@ class ParlayLeg(BaseModel):
 
 class ParlayRequest(BaseModel):
     """Request body for POST /parlay."""
+
     legs: list[ParlayLeg]
 
 
 class ParlayResponse(BaseModel):
     """Response body for POST /parlay."""
+
     leg_count: int
     raw_probability: float
     raw_american_odds: int
@@ -58,6 +62,7 @@ class ParlayResponse(BaseModel):
 
 
 # ---------- Routes ----------
+
 
 @app.get("/")
 def root() -> dict:
@@ -71,7 +76,7 @@ def get_sports() -> list[dict]:
     try:
         return list_sports()
     except OddsAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.get("/odds/{sport_key}")
@@ -87,25 +92,24 @@ def get_event_odds(sport_key: str, book: str | None = None) -> list[dict]:
     try:
         events = get_moneyline_odds(sport_key)
     except OddsAPIError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
     output = []
     for event in events:
         if book:
             prices = book_moneyline(event, book.lower())
         else:
-            prices = {
-                name: int(price)
-                for name, price in consensus_moneyline(event).items()
+            prices = {name: int(price) for name, price in consensus_moneyline(event).items()}
+        output.append(
+            {
+                "id": event.get("id"),
+                "home_team": event.get("home_team"),
+                "away_team": event.get("away_team"),
+                "commence_time": event.get("commence_time"),
+                "prices": prices,
+                "source": book.lower() if book else "consensus",
             }
-        output.append({
-            "id": event.get("id"),
-            "home_team": event.get("home_team"),
-            "away_team": event.get("away_team"),
-            "commence_time": event.get("commence_time"),
-            "prices": prices,
-            "source": book.lower() if book else "consensus",
-        })
+        )
     return output
 
 
@@ -121,22 +125,18 @@ def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
       `opposite_odds`; it de-vigs each leg and returns the result.
     """
     if not request.legs:
-        raise HTTPException(
-            status_code=400, detail="Parlay must contain at least one leg."
-        )
+        raise HTTPException(status_code=400, detail="Parlay must contain at least one leg.")
 
-    # Raw — includes the book's vig
     raw = 1.0
     for leg in request.legs:
         raw *= american_to_implied_probability(leg.american_odds)
 
-    # Fair — only if every leg includes opposite_odds
     fair: float | None = None
     if all(leg.opposite_odds is not None for leg in request.legs):
         fair = 1.0
         for leg in request.legs:
             own_p = american_to_implied_probability(leg.american_odds)
-            assert leg.opposite_odds is not None  # narrows type for checker
+            assert leg.opposite_odds is not None
             opp_p = american_to_implied_probability(leg.opposite_odds)
             fair *= devig_two_way(own_p, opp_p)[0]
 

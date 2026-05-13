@@ -8,15 +8,15 @@ import pytest
 from parlay import (
     Leg,
     american_to_implied_probability,
-    implied_to_american,
     devig_two_way,
+    implied_to_american,
     parlay_probability,
 )
-
 
 # ── Tests for american_to_implied_probability ─────────────────────────────────
 # Each function below is a single test case. pytest finds them because their
 # names start with "test_".
+
 
 def test_negative_odds_favorite():
     # -200 means "risk $200 to win $100" — a favourite.
@@ -48,6 +48,7 @@ def test_zero_odds_raises():
 
 # ── Tests for implied_to_american ─────────────────────────────────────────────
 
+
 def test_round_trip_favorite():
     # Converting 2/3 → American odds should give -200.
     # This is the "inverse" of the favourite formula.
@@ -71,6 +72,7 @@ def test_invalid_probability_raises():
 
 # ── Tests for devig_two_way ───────────────────────────────────────────────────
 
+
 def test_devig_normalizes_to_one():
     # -110 / -110 is the standard NFL spread line.
     # Each side implies: 110 / (110 + 100) ≈ 52.38%
@@ -92,11 +94,12 @@ def test_devig_passthrough_when_no_vig():
 
 # ── Tests for parlay_probability ──────────────────────────────────────────────
 
+
 def test_johns_three_leg_parlay():
     # Build the same three-leg parlay used in parlay.py's demo.
     legs = [
-        Leg("Team A to win",                       -200),
-        Leg("Player A to score a touchdown",       +250),
+        Leg("Team A to win", -200),
+        Leg("Player A to score a touchdown", +250),
         Leg("Player B to catch at least 5 passes", +240),
     ]
     # Calculate the expected result by hand:

@@ -11,12 +11,16 @@ zero for --offline.
 
 # argparse handles command-line arguments like --markets and --offline.
 import argparse
+
 # json lets us read and write JSON files.
 import json
+
 # sys lets us call sys.exit() to stop the program with an error code.
 import sys
+
 # Counter is a special dict that counts how many times each value appears.
 from collections import Counter
+
 # Path is a clean, object-oriented way to work with file system paths.
 from pathlib import Path
 
@@ -34,7 +38,7 @@ def book_market(event: dict, book_key: str, market_key: str) -> list[dict]:
     #   event → bookmakers list → markets list → outcomes list
     for book in event.get("bookmakers", []):
         if book.get("key") != book_key:
-            continue   # skip books that don't match
+            continue  # skip books that don't match
         for market in book.get("markets", []):
             if market.get("key") == market_key:
                 # Found the right book AND market — return the outcomes.
@@ -175,11 +179,7 @@ def main() -> None:
     # Check whether any bookmaker has h2h data for this event.
     # `any()` returns True if at least one item in the iterable is True.
     # This is a "generator expression" — like a list comprehension but lazy.
-    has_h2h = any(
-        m.get("key") == "h2h"
-        for b in richest.get("bookmakers", [])
-        for m in b.get("markets", [])
-    )
+    has_h2h = any(m.get("key") == "h2h" for b in richest.get("bookmakers", []) for m in b.get("markets", []))
 
     if has_h2h:
         print(f"\n{'─' * 64}")
