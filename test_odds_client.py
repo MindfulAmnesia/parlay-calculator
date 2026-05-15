@@ -14,7 +14,6 @@ from odds_client import (
 
 
 def fake_response(json_data, status_code=200, headers=None):
-    """Build a MagicMock that quacks like a requests.Response object."""
     response = MagicMock()
     response.status_code = status_code
     response.reason = "OK" if status_code == 200 else "Error"
@@ -23,8 +22,6 @@ def fake_response(json_data, status_code=200, headers=None):
     response.text = str(json_data)
     return response
 
-
-# --- list_sports ----------------------------------------------------------
 
 @patch("odds_client.requests.get")
 def test_list_sports_filters_active_by_default(mock_get):
@@ -47,14 +44,10 @@ def test_list_sports_can_include_inactive(mock_get):
     assert len(sports) == 2
 
 
-# --- get_odds -------------------------------------------------------------
-
 @patch("odds_client.requests.get")
 def test_get_odds_sends_correct_params(mock_get):
     mock_get.return_value = fake_response([])
     get_odds("baseball_mlb", markets=["h2h", "spreads"], regions="us")
-
-    # Inspect what get_odds actually sent to requests.get
     params = mock_get.call_args.kwargs["params"]
     assert params["markets"] == "h2h,spreads"
     assert params["regions"] == "us"
@@ -68,16 +61,12 @@ def test_get_odds_defaults_to_h2h_only(mock_get):
     assert mock_get.call_args.kwargs["params"]["markets"] == "h2h"
 
 
-# --- Error handling -------------------------------------------------------
-
 @patch("odds_client.requests.get")
 def test_non_200_response_raises_odds_api_error(mock_get):
     mock_get.return_value = fake_response({"message": "bad key"}, status_code=401)
     with pytest.raises(OddsAPIError):
         list_sports()
 
-
-# --- book_moneyline (pure function, no mocking needed) --------------------
 
 def test_book_moneyline_extracts_one_book_prices():
     event = {
@@ -104,8 +93,6 @@ def test_book_moneyline_missing_book_returns_empty():
     assert book_moneyline(event, "draftkings") == {}
 
 
-# --- consensus_moneyline (pure function) ----------------------------------
-
 def test_consensus_moneyline_returns_median_across_books():
     event = {
         "bookmakers": [
@@ -121,5 +108,6 @@ def test_consensus_moneyline_returns_median_across_books():
         ]
     }
     result = consensus_moneyline(event)
-    assert result["A"] == 105   # median of [100, 110, 105]
-    assert result["B"] == -120  # median of [-120, -125, -110]
+    assert result["A"] == 105
+    assert result["B"] == -120
+    

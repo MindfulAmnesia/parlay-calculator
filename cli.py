@@ -1,12 +1,4 @@
-"""
-cli.py — Interactive parlay builder.
-
-Usage:
-    python cli.py <sport_key> [--book BOOK_KEY] [--offline]
-
-Each leg is entered as '<event number> home' or '<event number> away'.
-Press Return on a blank line to compute the joint probability.
-"""
+# cli.py — Interactive parlay builder.
 
 import argparse
 import json
@@ -26,14 +18,12 @@ CACHE_FILE = Path("data") / "sample_odds.json"
 
 
 def get_prices(event: dict, book_key: str | None) -> dict[str, int]:
-    """Get prices either from a specific book or aggregated consensus."""
     if book_key:
         return book_moneyline(event, book_key)
     return {name: int(price) for name, price in consensus_moneyline(event).items()}
 
 
 def load_events(sport_key: str, offline: bool) -> list[dict]:
-    """Either fetch fresh from the API or load cached JSON."""
     if offline:
         if not CACHE_FILE.exists():
             print(f"No cached data at {CACHE_FILE}. Run without --offline first.")
@@ -45,15 +35,8 @@ def load_events(sport_key: str, offline: bool) -> list[dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sport_key", nargs="?", default="baseball_mlb")
-    parser.add_argument(
-        "--book",
-        help="Bookmaker key (e.g. draftkings, fanduel, betmgm, lowvig). Defaults to consensus across all books.",
-    )
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help="Use cached data/sample_odds.json instead of hitting the API",
-    )
+    parser.add_argument("--book", help="Bookmaker key (e.g. draftkings, fanduel).")
+    parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
 
     book_key = args.book.lower() if args.book else None
@@ -85,7 +68,7 @@ def main() -> None:
     legs: list[Leg] = []
     opposite_odds: list[int] = []
     while True:
-        line = input(f"  Leg {len(legs) + 1}: ").strip().lower().split()
+        line = input(f"  Leg {len(legs)+1}: ").strip().lower().split()
         if not line:
             break
         if len(line) != 2 or not line[0].isdigit():
@@ -120,10 +103,10 @@ def main() -> None:
     print(f"Your parlay  ({book_label}):")
     for leg in legs:
         p = american_to_implied_probability(leg.american_odds)
-        print(f"  {leg.american_odds:+6}  {leg.description}  ({p * 100:.2f}%)")
+        print(f"  {leg.american_odds:+6}  {leg.description}  ({p*100:.2f}%)")
     print("-" * 64)
-    print(f"  Raw joint probability:        {raw * 100:7.3f}%   ({implied_to_american(raw):+d})")
-    print(f"  Fair (de-vigged) probability: {fair * 100:7.3f}%   ({implied_to_american(fair):+d})")
+    print(f"  Raw joint probability:        {raw*100:7.3f}%   ({implied_to_american(raw):+d})")
+    print(f"  Fair (de-vigged) probability: {fair*100:7.3f}%   ({implied_to_american(fair):+d})")
     print("=" * 64)
 
 

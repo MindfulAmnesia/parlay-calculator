@@ -1,17 +1,14 @@
 """
-odds_client.py — Thin client for The Odds API.
-
-Fetches live odds for a given sport. The /sports endpoint is free;
-the /odds endpoint counts against your monthly quota (500 on the free tier).
-
-Reference: https://the-odds-api.com/liveapi/guides/v4/
+odds_client.py — Thin client for The Odds API with in-memory caching.
 """
 
 import os
 from statistics import median
+from threading import Lock
 from typing import Any
 
 import requests
+from cachetools import TTLCache
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,10 +22,6 @@ class OddsAPIError(Exception):
 
 
 def _get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """Perform a GET against the API and return parsed JSON.
-
-    Prints quota headers when present; raises OddsAPIError on non-200.
-    """
     if not API_KEY:
         raise OddsAPIError("ODDS_API_KEY not set. Check your .env file.")
 
@@ -44,7 +37,9 @@ def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         print(f"[quota] used={used}  remaining={remaining}")
 
     if response.status_code != 200:
-        raise OddsAPIError(f"{response.status_code} {response.reason}: {response.text[:200]}")
+        raise OddsAPIError(
+            f"{response.status_code} {response.reason}: {response.text[:200]}"
+        )
     return response.json()
 
 
@@ -59,11 +54,7 @@ def get_odds(
     markets: list[str] | None = None,
     regions: str = "us",
 ) -> list[dict]:
-    """Fetch live odds for the given sport, markets, and regions.
-
-    Quota cost: len(markets) * number of regions per call.
-    Defaults to ['h2h'] (1 credit per region).
-    """
+    """Fetch live odds. Quota cost: len(markets) * number of regions per call."""
     if markets is None:
         markets = ["h2h"]
     return _get(
@@ -108,32 +99,54 @@ def consensus_moneyline(event: dict) -> dict[str, float]:
     return {name: median(odds_list) for name, odds_list in prices.items()}
 
 
-def main() -> None:
-    """Demo: list active sports, then show consensus moneylines for one."""
-    sports = list_sports()
-    print(f"\n{len(sports)} active sports:\n")
-    for s in sports[:20]:
-        print(f"  {s['key']:<42}  {s['title']}")
-    if len(sports) > 20:
-        print(f"  ... and {len(sports) - 20} more")
+# ---------- In-memory caching layer ----------
+# First call fetches and caches; subsequent calls within the TTL window
+# serve the cached value. Caches reset on server restart.
 
-    sport_key = input("\nEnter a sport key: ").strip()
-    if not sport_key:
-        print("No sport entered.")
-        return
+_odds_cache: TTLCache = TTLCache(maxsize=64, ttl=60)
+_odds_cache_lock = Lock()
 
-    events = get_moneyline_odds(sport_key)
-    if not events:
-        print(f"No events with current odds for {sport_key}.")
-        return
-
-    print(f"\n{len(events)} events found. First 5:\n")
-    for ev in events[:5]:
-        print(f"  {ev.get('away_team')} @ {ev.get('home_team')}")
-        for name, price in consensus_moneyline(ev).items():
-            print(f"      {name:<30}  {int(price):+d}")
-        print()
+_sports_cache: TTLCache = TTLCache(maxsize=2, ttl=300)
+_sports_cache_lock = Lock()
 
 
-if __name__ == "__main__":
-    main()
+def get_odds_cached(
+    sport_key: str,
+    markets: list[str] | None = None,
+    regions: str = "us",
+) -> list[dict]:
+    """Cached wrapper around get_odds. TTL: 60 seconds."""
+    if markets is None:
+        markets = ["h2h"]
+    cache_key = (sport_key, tuple(markets), regions)
+
+    with _odds_cache_lock:
+        if cache_key in _odds_cache:
+            print(f"[cache] HIT  odds {cache_key}")
+            return _odds_cache[cache_key]
+
+    print(f"[cache] MISS odds {cache_key}")
+    events = get_odds(sport_key, markets=markets, regions=regions)
+
+    with _odds_cache_lock:
+        _odds_cache[cache_key] = events
+
+    return events
+
+
+def list_sports_cached(active_only: bool = True) -> list[dict]:
+    """Cached wrapper around list_sports. TTL: 300 seconds (5 minutes)."""
+    cache_key = ("active_only", active_only)
+
+    with _sports_cache_lock:
+        if cache_key in _sports_cache:
+            print(f"[cache] HIT  sports active_only={active_only}")
+            return _sports_cache[cache_key]
+
+    print(f"[cache] MISS sports active_only={active_only}")
+    sports = list_sports(active_only=active_only)
+
+    with _sports_cache_lock:
+        _sports_cache[cache_key] = sports
+
+    return sports

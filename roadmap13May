@@ -1,0 +1,11 @@
+# Parlay Calculator as of 14.May.2026
+#├── parlay.py             # Pure math engine
+#├── odds_client.py        # The Odds API client (with consensus + per-book extraction)
+#├── main.py               # FastAPI HTTP service (4 endpoints, Pydantic-validated)
+#├── cli.py                # Interactive command-line tool
+#├── explore.py            # API response inspector with offline mode
+#├── test_parlay.py        # 11 tests
+#├── test_odds_client.py   # 8 mock-based tests
+#├── test_main.py          # 10 endpoint tests
+#├── pyproject.toml        # Ruff + tool config
+#└── .env / .env.example   # Secrets pattern

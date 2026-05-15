@@ -1,21 +1,19 @@
 """
 main.py — FastAPI HTTP service exposing the parlay calculator.
-
-Run locally with:
-    uvicorn main:app --reload
-
-Then open http://localhost:8000/docs for the interactive API docs.
 """
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from db import list_parlays as db_list_parlays
+from db import load_parlay as db_load_parlay
+from db import save_parlay as db_save_parlay
 from odds_client import (
     OddsAPIError,
     book_moneyline,
     consensus_moneyline,
-    get_moneyline_odds,
-    list_sports,
+    get_odds_cached,
+    list_sports_cached,
 )
 from parlay import (
     american_to_implied_probability,
@@ -26,16 +24,13 @@ from parlay import (
 app = FastAPI(
     title="Parlay Calculator API",
     description="Live joint probability for sports betting parlays.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 
-# ---------- Pydantic models for /parlay ----------
-
+# ---------- Pydantic models ----------
 
 class ParlayLeg(BaseModel):
-    """One leg of a parlay."""
-
     description: str = Field(..., description="Human-readable name, e.g. 'Yankees ML'")
     american_odds: int = Field(..., description="American moneyline, e.g. -150 or +250")
     opposite_odds: int | None = Field(
@@ -45,14 +40,10 @@ class ParlayLeg(BaseModel):
 
 
 class ParlayRequest(BaseModel):
-    """Request body for POST /parlay."""
-
     legs: list[ParlayLeg]
 
 
 class ParlayResponse(BaseModel):
-    """Response body for POST /parlay."""
-
     leg_count: int
     raw_probability: float
     raw_american_odds: int
@@ -61,36 +52,83 @@ class ParlayResponse(BaseModel):
     legs: list[ParlayLeg]
 
 
-# ---------- Routes ----------
+class SaveParlayRequest(BaseModel):
+    legs: list[ParlayLeg]
+    sport_key: str | None = None
+    book: str | None = None
 
+
+class SaveParlayResponse(BaseModel):
+    id: int
+    raw_probability: float
+    raw_american_odds: int
+    fair_probability: float | None = None
+    fair_american_odds: int | None = None
+
+
+class SavedParlayLeg(BaseModel):
+    description: str
+    american_odds: int
+    opposite_odds: int | None = None
+
+
+class SavedParlay(BaseModel):
+    id: int
+    created_at: str
+    sport_key: str | None = None
+    book: str | None = None
+    raw_probability_at_save: float | None = None
+    fair_probability_at_save: float | None = None
+    legs: list[SavedParlayLeg]
+
+
+class SavedParlaySummary(BaseModel):
+    id: int
+    created_at: str
+    sport_key: str | None = None
+    book: str | None = None
+    raw_probability_at_save: float | None = None
+    fair_probability_at_save: float | None = None
+
+
+# ---------- Helpers ----------
+
+def _compute_probabilities(legs: list[ParlayLeg]) -> tuple[float, float | None]:
+    raw = 1.0
+    for leg in legs:
+        raw *= american_to_implied_probability(leg.american_odds)
+
+    fair: float | None = None
+    if all(leg.opposite_odds is not None for leg in legs):
+        fair = 1.0
+        for leg in legs:
+            own_p = american_to_implied_probability(leg.american_odds)
+            assert leg.opposite_odds is not None
+            opp_p = american_to_implied_probability(leg.opposite_odds)
+            fair *= devig_two_way(own_p, opp_p)[0]
+
+    return raw, fair
+
+
+# ---------- Routes ----------
 
 @app.get("/")
 def root() -> dict:
-    """Health check / friendly greeting."""
     return {"message": "Parlay Calculator API is running. See /docs for the API."}
 
 
 @app.get("/sports")
 def get_sports() -> list[dict]:
-    """List active sports the Odds API tracks. Free — no quota cost."""
     try:
-        return list_sports()
+        return list_sports_cached()
     except OddsAPIError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @app.get("/odds/{sport_key}")
 def get_event_odds(sport_key: str, book: str | None = None) -> list[dict]:
-    """Fetch live moneyline odds for all events in a sport.
-
-    Costs 1 quota credit on the Odds API per call.
-
-    - If `book` is provided (e.g. ?book=draftkings), only that book's
-      prices are returned for each event.
-    - Otherwise the consensus (median across all books) is returned.
-    """
     try:
-        events = get_moneyline_odds(sport_key)
+        events = get_odds_cached(sport_key)
     except OddsAPIError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
@@ -99,47 +137,27 @@ def get_event_odds(sport_key: str, book: str | None = None) -> list[dict]:
         if book:
             prices = book_moneyline(event, book.lower())
         else:
-            prices = {name: int(price) for name, price in consensus_moneyline(event).items()}
-        output.append(
-            {
-                "id": event.get("id"),
-                "home_team": event.get("home_team"),
-                "away_team": event.get("away_team"),
-                "commence_time": event.get("commence_time"),
-                "prices": prices,
-                "source": book.lower() if book else "consensus",
+            prices = {
+                name: int(price)
+                for name, price in consensus_moneyline(event).items()
             }
-        )
+        output.append({
+            "id": event.get("id"),
+            "home_team": event.get("home_team"),
+            "away_team": event.get("away_team"),
+            "commence_time": event.get("commence_time"),
+            "prices": prices,
+            "source": book.lower() if book else "consensus",
+        })
     return output
 
 
 @app.post("/parlay")
 def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
-    """Compute the joint probability of a parlay.
-
-    Costs zero quota — this is pure math, no Odds API call.
-
-    - `raw_probability` multiplies implied probabilities directly
-      (vig included). This is what a sportsbook's quoted odds imply.
-    - `fair_probability` is included when every leg supplies
-      `opposite_odds`; it de-vigs each leg and returns the result.
-    """
     if not request.legs:
         raise HTTPException(status_code=400, detail="Parlay must contain at least one leg.")
 
-    raw = 1.0
-    for leg in request.legs:
-        raw *= american_to_implied_probability(leg.american_odds)
-
-    fair: float | None = None
-    if all(leg.opposite_odds is not None for leg in request.legs):
-        fair = 1.0
-        for leg in request.legs:
-            own_p = american_to_implied_probability(leg.american_odds)
-            assert leg.opposite_odds is not None
-            opp_p = american_to_implied_probability(leg.opposite_odds)
-            fair *= devig_two_way(own_p, opp_p)[0]
-
+    raw, fair = _compute_probabilities(request.legs)
     return ParlayResponse(
         leg_count=len(request.legs),
         raw_probability=raw,
@@ -148,3 +166,40 @@ def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
         fair_american_odds=implied_to_american(fair) if fair is not None else None,
         legs=request.legs,
     )
+
+
+@app.post("/parlay/save", status_code=201)
+def post_save_parlay(request: SaveParlayRequest) -> SaveParlayResponse:
+    if not request.legs:
+        raise HTTPException(status_code=400, detail="Parlay must contain at least one leg.")
+
+    raw, fair = _compute_probabilities(request.legs)
+    legs_for_db = [leg.model_dump() for leg in request.legs]
+    parlay_id = db_save_parlay(
+        legs=legs_for_db,
+        sport_key=request.sport_key,
+        book=request.book,
+        raw_probability=raw,
+        fair_probability=fair,
+    )
+
+    return SaveParlayResponse(
+        id=parlay_id,
+        raw_probability=raw,
+        raw_american_odds=implied_to_american(raw),
+        fair_probability=fair,
+        fair_american_odds=implied_to_american(fair) if fair is not None else None,
+    )
+
+
+@app.get("/parlay/{parlay_id}")
+def get_parlay(parlay_id: int) -> SavedParlay:
+    parlay = db_load_parlay(parlay_id)
+    if parlay is None:
+        raise HTTPException(status_code=404, detail=f"Parlay {parlay_id} not found.")
+    return SavedParlay(**parlay)
+
+
+@app.get("/parlays")
+def get_parlays(limit: int = 50) -> list[SavedParlaySummary]:
+    return [SavedParlaySummary(**p) for p in db_list_parlays(limit=limit)]

@@ -1,21 +1,5 @@
 """
 parlay.py — Joint probability calculator for sports betting parlays.
-
-This module converts American moneyline odds into implied probabilities and
-computes the joint probability of a parlay (a wager that pays only if every
-leg succeeds).
-
-Notes on the math:
-  - American moneyline odds:
-        positive odds (+N):  p = 100 / (N + 100)
-        negative odds (-N):  p = N / (N + 100)
-  - Implied probabilities posted by sportsbooks include the book's margin
-    (the "vig"). The two sides of a two-way market sum to more than 1.0;
-    the excess is the vig. Dividing each side by the total recovers the
-    book's "fair" estimate.
-  - parlay_probability() assumes legs are statistically independent. This is
-    reasonable for legs across different games, but it OVERSTATES the joint
-    probability for Same Game Parlays, where legs are correlated.
 """
 
 from dataclasses import dataclass
@@ -24,7 +8,6 @@ from dataclasses import dataclass
 @dataclass
 class Leg:
     """A single leg of a parlay."""
-
     description: str
     american_odds: int
 
@@ -50,12 +33,7 @@ def implied_to_american(probability: float) -> int:
 
 
 def devig_two_way(prob_a: float, prob_b: float) -> tuple[float, float]:
-    """Remove the bookmaker's vig from a two-way market.
-
-    Given the implied probabilities of two opposing outcomes (whose sum
-    exceeds 1.0 because of the vig), return the fair probabilities that
-    sum to exactly 1.0.
-    """
+    """Remove the bookmaker's vig from a two-way market."""
     total = prob_a + prob_b
     if total <= 1:
         return prob_a, prob_b
@@ -73,8 +51,8 @@ def parlay_probability(legs: list[Leg]) -> float:
 def main() -> None:
     """Demo using John's three-leg parlay from the project brief."""
     johns_parlay = [
-        Leg("Team A to win", -200),
-        Leg("Player A to score a touchdown", +250),
+        Leg("Team A to win",                       -200),
+        Leg("Player A to score a touchdown",       +250),
         Leg("Player B to catch at least 5 passes", +240),
     ]
 
@@ -88,9 +66,10 @@ def main() -> None:
     joint = parlay_probability(johns_parlay)
     payout_odds = implied_to_american(joint)
     print("-" * 65)
-    print(f"Joint probability (independence assumed): {joint:.4f}  ({joint * 100:.2f}%)")
+    print(f"Joint probability (independence assumed): {joint:.4f}  ({joint*100:.2f}%)")
     print(f"Equivalent American odds:                 {payout_odds:+d}")
 
 
 if __name__ == "__main__":
     main()
+
