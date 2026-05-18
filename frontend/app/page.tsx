@@ -23,9 +23,17 @@ export default async function HomePage() {
   const sports = await fetchSports();
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 p-8">
+    <main className="min-h-screen bg-slate-900 text-slate-100 p-8 pb-32">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2">Parlay Calculator</h1>
+        <div className="flex justify-between items-start mb-2">
+          <h1 className="text-3xl font-bold">Parlay Calculator</h1>
+          <Link
+            href="/parlays"
+            className="text-sm text-slate-400 hover:text-slate-200"
+          >
+            Saved Parlays →
+          </Link>
+        </div>
         <p className="text-slate-400 mb-8">
           {sports.length} active sports from The Odds API
         </p>

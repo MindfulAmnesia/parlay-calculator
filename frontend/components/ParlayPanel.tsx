@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useState } from "react";
 import { useParlay } from "@/lib/ParlayContext";
 import { impliedToAmerican, parlayProbability } from "@/lib/parlay-math";
 
@@ -11,14 +13,58 @@ function formatOdds(odds: number): string {
   return odds > 0 ? `+${odds}` : `${odds}`;
 }
 
+interface SaveState {
+  status: "idle" | "saving" | "saved" | "error";
+  parlayId?: number;
+  error?: string;
+}
+
 export default function ParlayPanel() {
   const { legs, removeLeg, clear } = useParlay();
+  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
   if (legs.length === 0) {
     return null;
   }
 
   const { raw, fair } = parlayProbability(legs);
+
+  async function handleSave() {
+    setSaveState({ status: "saving" });
+
+    const body = {
+      legs: legs.map((leg) => ({
+        description: leg.description,
+        american_odds: leg.americanOdds,
+        opposite_odds: leg.oppositeOdds ?? null,
+      })),
+      sport_key: legs[0]?.sportKey ?? null,
+      book: legs[0]?.book ?? null,
+    };
+
+    try {
+      const res = await fetch("http://localhost:8000/parlay/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        throw new Error(`Backend returned ${res.status}`);
+      }
+      const data = await res.json();
+      setSaveState({ status: "saved", parlayId: data.id });
+    } catch (e) {
+      setSaveState({
+        status: "error",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  function handleClear() {
+    clear();
+    setSaveState({ status: "idle" });
+  }
 
   return (
     <div className="fixed bottom-4 right-4 w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl p-4 text-slate-100">
@@ -27,7 +73,7 @@ export default function ParlayPanel() {
           Parlay ({legs.length} {legs.length === 1 ? "leg" : "legs"})
         </h2>
         <button
-          onClick={clear}
+          onClick={handleClear}
           className="text-xs text-slate-400 hover:text-slate-200"
         >
           Clear
@@ -77,6 +123,43 @@ export default function ParlayPanel() {
               <span className="font-mono">{formatOdds(impliedToAmerican(fair))}</span>
             </div>
           </>
+        )}
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-slate-700">
+        {saveState.status === "idle" && (
+          <button
+            onClick={handleSave}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-medium transition"
+          >
+            Save Parlay
+          </button>
+        )}
+        {saveState.status === "saving" && (
+          <button
+            disabled
+            className="w-full bg-slate-600 text-slate-400 py-2 rounded font-medium cursor-not-allowed"
+          >
+            Saving...
+          </button>
+        )}
+        {saveState.status === "saved" && (
+          <div className="text-center text-sm">
+            <div className="text-emerald-300">
+              ✓ Saved as parlay #{saveState.parlayId}
+            </div>
+            <Link
+              href="/parlays"
+              className="inline-block mt-1 text-xs text-slate-400 hover:text-slate-200 underline"
+            >
+              View all saved parlays →
+            </Link>
+          </div>
+        )}
+        {saveState.status === "error" && (
+          <div className="text-center text-sm text-red-300">
+            Save failed: {saveState.error}
+          </div>
         )}
       </div>
     </div>
