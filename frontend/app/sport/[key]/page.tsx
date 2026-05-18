@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BookSelector from "./BookSelector";
 
 interface Prices {
   [team: string]: number;
@@ -13,10 +14,11 @@ interface Game {
   source: string;
 }
 
-async function fetchGames(sportKey: string): Promise<Game[]> {
-  const res = await fetch(`http://localhost:8000/odds/${sportKey}`, {
-    cache: "no-store",
-  });
+async function fetchGames(sportKey: string, book?: string): Promise<Game[]> {
+  const url = book
+    ? `http://localhost:8000/odds/${sportKey}?book=${book}`
+    : `http://localhost:8000/odds/${sportKey}`;
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Backend returned ${res.status}`);
   }
@@ -40,11 +42,14 @@ function formatTime(iso: string): string {
 
 export default async function SportPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ book?: string }>;
 }) {
   const { key } = await params;
-  const games = await fetchGames(key);
+  const { book } = await searchParams;
+  const games = await fetchGames(key, book);
 
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 p-8">
@@ -53,9 +58,11 @@ export default async function SportPage({
           ← All sports
         </Link>
         <h1 className="text-3xl font-bold mt-2 mb-2">{key}</h1>
-        <p className="text-slate-400 mb-8">
+        <p className="text-slate-400 mb-6">
           {games.length} upcoming game{games.length === 1 ? "" : "s"}
         </p>
+
+        <BookSelector currentBook={book} />
 
         {games.length === 0 ? (
           <p className="text-slate-500 italic">
@@ -64,12 +71,9 @@ export default async function SportPage({
         ) : (
           <ul className="space-y-3">
             {games.map((game) => (
-              <li
-                key={game.id}
-                className="bg-slate-800 p-4 rounded-lg"
-              >
+              <li key={game.id} className="bg-slate-800 p-4 rounded-lg">
                 <div className="text-xs text-slate-500 mb-2">
-                  {formatTime(game.commence_time)} • consensus
+                  {formatTime(game.commence_time)} • {game.source}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex justify-between">
