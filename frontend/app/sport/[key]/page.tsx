@@ -15,6 +15,12 @@ interface Game {
   source: string;
 }
 
+interface Sport {
+  key: string;
+  title: string;
+  description: string;
+}
+
 async function fetchGames(sportKey: string, book?: string): Promise<Game[]> {
   const url = book
     ? `http://localhost:8000/odds/${sportKey}?book=${book}`
@@ -26,6 +32,21 @@ async function fetchGames(sportKey: string, book?: string): Promise<Game[]> {
   return res.json();
 }
 
+async function fetchSportMeta(
+  key: string,
+): Promise<{ title: string; description: string }> {
+  try {
+    const res = await fetch("http://localhost:8000/sports", { cache: "no-store" });
+    if (!res.ok) throw new Error("sports fetch failed");
+    const sports: Sport[] = await res.json();
+    const sport = sports.find((s) => s.key === key);
+    if (sport) return { title: sport.title, description: sport.description };
+  } catch {
+    // fall through to safe default
+  }
+  return { title: key, description: "" };
+}
+
 export default async function SportPage({
   params,
   searchParams,
@@ -35,7 +56,11 @@ export default async function SportPage({
 }) {
   const { key } = await params;
   const { book } = await searchParams;
-  const games = await fetchGames(key, book);
+
+  const [{ title, description }, games] = await Promise.all([
+    fetchSportMeta(key),
+    fetchGames(key, book),
+  ]);
 
   return (
     <main className="min-h-screen bg-slate-900 text-slate-100 p-8 pb-64">
@@ -43,7 +68,10 @@ export default async function SportPage({
         <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">
           ← All sports
         </Link>
-        <h1 className="text-3xl font-bold mt-2 mb-2">{key}</h1>
+        <h1 className="text-3xl font-bold mt-2 mb-1">{title}</h1>
+        {description && (
+          <p className="text-sm text-slate-500 mb-2">{description}</p>
+        )}
         <p className="text-slate-400 mb-6">
           {games.length} upcoming game{games.length === 1 ? "" : "s"}
         </p>
