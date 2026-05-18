@@ -7,11 +7,12 @@ const BOOKS: { value: string; label: string }[] = [
   { value: "draftkings",    label: "DraftKings" },
   { value: "fanduel",       label: "FanDuel" },
   { value: "betmgm",        label: "BetMGM" },
-  { value: "caesars",       label: "Caesars" },
-  { value: "bovada",        label: "Bovada" },
   { value: "betrivers",     label: "BetRivers" },
-  { value: "lowvig",        label: "LowVig.ag" },
+  { value: "bovada",        label: "Bovada" },
   { value: "betonlineag",   label: "BetOnline.ag" },
+  { value: "betus",         label: "BetUS" },
+  { value: "lowvig",        label: "LowVig.ag" },
+  { value: "mybookieag",    label: "MyBookie.ag" },
 ];
 
 export default function BookSelector({ currentBook }: { currentBook?: string }) {

@@ -54,3 +54,18 @@ export function parlayProbability(legs: ParlayMathLeg[]): {
 
   return { raw, fair };
 }
+
+/**
+ * Calculate the vig (bookmaker's margin) on a two-way moneyline.
+ * Returns the excess over 100% as a fraction (0.0348 = 3.48% vig),
+ * or null if prices aren't a valid two-way market.
+ */
+export function calculateVig(prices: Record<string, number>): number | null {
+  const values = Object.values(prices);
+  if (values.length !== 2) return null;
+  const sum = values.reduce(
+    (acc, odds) => acc + americanToImpliedProbability(odds),
+    0,
+  );
+  return sum - 1;
+}

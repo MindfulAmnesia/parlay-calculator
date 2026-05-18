@@ -1,6 +1,7 @@
 "use client";
 
 import { ParlayLeg, useParlay } from "@/lib/ParlayContext";
+import { calculateVig } from "@/lib/parlay-math";
 
 interface Prices {
   [team: string]: number;
@@ -41,6 +42,16 @@ function formatTime(iso: string): string {
   return `${weekday}, ${month} ${day}, ${hour}:${minute} ${ampm}`;
 }
 
+function vigBadgeClass(vig: number): string {
+  if (vig < 0.04) {
+    return "px-2 py-0.5 rounded text-xs font-medium font-mono bg-emerald-900 text-emerald-300";
+  }
+  if (vig < 0.06) {
+    return "px-2 py-0.5 rounded text-xs font-medium font-mono bg-amber-900 text-amber-300";
+  }
+  return "px-2 py-0.5 rounded text-xs font-medium font-mono bg-red-900 text-red-300";
+}
+
 export default function GameCard({
   gameId,
   homeTeam,
@@ -51,6 +62,7 @@ export default function GameCard({
   sportKey,
 }: GameCardProps) {
   const { addLeg, removeLeg, hasLeg } = useParlay();
+  const vig = calculateVig(prices);
 
   const handleClick = (team: string, americanOdds: number, opposingTeam: string) => {
     const legId = `${gameId}:${team}`;
@@ -104,8 +116,15 @@ export default function GameCard({
 
   return (
     <li className="bg-slate-800 p-4 rounded-lg">
-      <div className="text-xs text-slate-500 mb-2">
-        {formatTime(commenceTime)} • {source}
+      <div className="flex justify-between items-center mb-2 text-xs text-slate-500">
+        <span>
+          {formatTime(commenceTime)} • {source}
+        </span>
+        {vig !== null && (
+          <span className={vigBadgeClass(vig)}>
+            Vig {(vig * 100).toFixed(2)}%
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {renderRow(awayTeam, homeTeam)}
