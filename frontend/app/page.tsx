@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 interface Sport {
   key: string;
   active: boolean;
@@ -30,15 +32,17 @@ export default async function HomePage() {
 
         <ul className="space-y-2">
           {sports.map((sport) => (
-            <li
-              key={sport.key}
-              className="bg-slate-800 p-4 rounded-lg flex justify-between items-center"
-            >
-              <div>
-                <div className="font-semibold">{sport.title}</div>
-                <div className="text-sm text-slate-400">{sport.description}</div>
-              </div>
-              <div className="text-xs text-slate-500 font-mono">{sport.key}</div>
+            <li key={sport.key}>
+              <Link
+                href={`/sport/${sport.key}`}
+                className="bg-slate-800 hover:bg-slate-700 transition p-4 rounded-lg flex justify-between items-center"
+              >
+                <div>
+                  <div className="font-semibold">{sport.title}</div>
+                  <div className="text-sm text-slate-400">{sport.description}</div>
+                </div>
+                <div className="text-xs text-slate-500 font-mono">{sport.key}</div>
+              </Link>
             </li>
           ))}
         </ul>
