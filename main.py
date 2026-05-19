@@ -3,6 +3,7 @@ main.py — FastAPI HTTP service exposing the parlay calculator.
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from db import list_parlays as db_list_parlays
@@ -11,6 +12,8 @@ from db import save_parlay as db_save_parlay
 from odds_client import (
     OddsAPIError,
     book_moneyline,
+    book_spreads,
+    book_totals,
     consensus_moneyline,
     get_odds_cached,
     list_sports_cached,
@@ -27,8 +30,6 @@ app = FastAPI(
     version="0.2.0",
 )
 
-from fastapi.middleware.cors import CORSMiddleware
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -36,6 +37,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ---------- Pydantic models ----------
 
@@ -137,25 +139,36 @@ def get_sports() -> list[dict]:
 @app.get("/odds/{sport_key}")
 def get_event_odds(sport_key: str, book: str | None = None) -> list[dict]:
     try:
-        events = get_odds_cached(sport_key)
+        events = get_odds_cached(
+            sport_key,
+            markets=["h2h", "spreads", "totals"],
+        )
     except OddsAPIError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     output = []
     for event in events:
         if book:
-            prices = book_moneyline(event, book.lower())
+            book_lower = book.lower()
+            prices = book_moneyline(event, book_lower)
+            spreads = book_spreads(event, book_lower)
+            totals = book_totals(event, book_lower)
         else:
             prices = {
                 name: int(price)
                 for name, price in consensus_moneyline(event).items()
             }
+            spreads = []
+            totals = []
+
         output.append({
             "id": event.get("id"),
             "home_team": event.get("home_team"),
             "away_team": event.get("away_team"),
             "commence_time": event.get("commence_time"),
             "prices": prices,
+            "spreads": spreads,
+            "totals": totals,
             "source": book.lower() if book else "consensus",
         })
     return output

@@ -72,16 +72,49 @@ def get_moneyline_odds(sport_key: str, regions: str = "us") -> list[dict]:
     return get_odds(sport_key, markets=["h2h"], regions=regions)
 
 
-def book_moneyline(event: dict, book_key: str) -> dict[str, int]:
-    """Return {team_name: american_odds} for one specific bookmaker."""
+def _market_outcomes(event: dict, book_key: str, market_key: str) -> list[dict]:
+    """Return raw outcomes list for one (book, market) combo, or [] if absent."""
     for book in event.get("bookmakers", []):
         if book.get("key") != book_key:
             continue
         for market in book.get("markets", []):
-            if market.get("key") != "h2h":
-                continue
-            return {o["name"]: int(o["price"]) for o in market.get("outcomes", [])}
-    return {}
+            if market.get("key") == market_key:
+                return market.get("outcomes", [])
+    return []
+
+
+def book_moneyline(event: dict, book_key: str) -> dict[str, int]:
+    """Return {team_name: american_odds} for one specific bookmaker's h2h."""
+    outcomes = _market_outcomes(event, book_key, "h2h")
+    return {o["name"]: int(o["price"]) for o in outcomes if "price" in o}
+
+
+def book_spreads(event: dict, book_key: str) -> list[dict]:
+    """Return [{name, price, point}, ...] for one book's spreads, or []."""
+    outcomes = _market_outcomes(event, book_key, "spreads")
+    return [
+        {
+            "name": o["name"],
+            "price": int(o["price"]),
+            "point": float(o["point"]),
+        }
+        for o in outcomes
+        if "price" in o and "point" in o
+    ]
+
+
+def book_totals(event: dict, book_key: str) -> list[dict]:
+    """Return [{name, price, point}, ...] for one book's totals, or []."""
+    outcomes = _market_outcomes(event, book_key, "totals")
+    return [
+        {
+            "name": o["name"],
+            "price": int(o["price"]),
+            "point": float(o["point"]),
+        }
+        for o in outcomes
+        if "price" in o and "point" in o
+    ]
 
 
 def consensus_moneyline(event: dict) -> dict[str, float]:

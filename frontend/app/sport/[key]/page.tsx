@@ -6,12 +6,20 @@ interface Prices {
   [team: string]: number;
 }
 
+interface PointOutcome {
+  name: string;
+  price: number;
+  point: number;
+}
+
 interface Game {
   id: string;
   home_team: string;
   away_team: string;
   commence_time: string;
   prices: Prices;
+  spreads: PointOutcome[];
+  totals: PointOutcome[];
   source: string;
 }
 
@@ -92,6 +100,8 @@ export default async function SportPage({
                 awayTeam={game.away_team}
                 commenceTime={game.commence_time}
                 prices={game.prices}
+                spreads={game.spreads}
+                totals={game.totals}
                 source={game.source}
                 sportKey={key}
               />
