@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 interface Sport {
   key: string;
@@ -10,7 +11,7 @@ interface Sport {
 }
 
 async function fetchSports(): Promise<Sport[]> {
-  const res = await fetch("http://localhost:8000/sports", {
+  const res = await fetch(`${API_URL}/sports`, {
     cache: "no-store",
   });
   if (!res.ok) {

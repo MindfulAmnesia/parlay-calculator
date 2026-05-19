@@ -1,5 +1,6 @@
 import Link from "next/link";
 import GameCard from "@/components/GameCard";
+import { API_URL } from "@/lib/api";
 import BookSelector from "./BookSelector";
 
 interface Prices {
@@ -31,8 +32,8 @@ interface Sport {
 
 async function fetchGames(sportKey: string, book?: string): Promise<Game[]> {
   const url = book
-    ? `http://localhost:8000/odds/${sportKey}?book=${book}`
-    : `http://localhost:8000/odds/${sportKey}`;
+    ? `${API_URL}/odds/${sportKey}?book=${book}`
+    : `${API_URL}/odds/${sportKey}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(`Backend returned ${res.status}`);
@@ -44,7 +45,7 @@ async function fetchSportMeta(
   key: string,
 ): Promise<{ title: string; description: string }> {
   try {
-    const res = await fetch("http://localhost:8000/sports", { cache: "no-store" });
+    const res = await fetch(`${API_URL}/sports`, { cache: "no-store" });
     if (!res.ok) throw new Error("sports fetch failed");
     const sports: Sport[] = await res.json();
     const sport = sports.find((s) => s.key === key);

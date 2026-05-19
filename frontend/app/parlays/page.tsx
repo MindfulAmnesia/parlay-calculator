@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 interface SavedParlay {
   id: number;
@@ -10,7 +11,7 @@ interface SavedParlay {
 }
 
 async function fetchSavedParlays(): Promise<SavedParlay[]> {
-  const res = await fetch("http://localhost:8000/parlays", {
+  const res = await fetch(`${API_URL}/parlays`, {
     cache: "no-store",
   });
   if (!res.ok) {

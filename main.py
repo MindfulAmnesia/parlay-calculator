@@ -2,6 +2,8 @@
 main.py — FastAPI HTTP service exposing the parlay calculator.
 """
 
+import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -30,9 +32,14 @@ app = FastAPI(
     version="0.2.0",
 )
 
+# Comma-separated list of permitted frontend origins.
+# Local dev defaults to localhost:3000; production sets this via env var.
+_frontend_urls_env = os.getenv("FRONTEND_URLS", "http://localhost:3000")
+_allow_origins = [u.strip() for u in _frontend_urls_env.split(",") if u.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

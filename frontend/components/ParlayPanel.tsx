@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { API_URL } from "@/lib/api";
 import { useParlay } from "@/lib/ParlayContext";
 import { impliedToAmerican, parlayProbability } from "@/lib/parlay-math";
 
@@ -43,7 +44,7 @@ export default function ParlayPanel() {
     };
 
     try {
-      const res = await fetch("http://localhost:8000/parlay/save", {
+      const res = await fetch(`${API_URL}/parlay/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
