@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import GameCard from "@/components/GameCard";
 import { API_URL } from "@/lib/api";
 
@@ -28,10 +29,9 @@ interface Game {
 interface LiveGameListProps {
   initialGames: Game[];
   sportKey: string;
-  book?: string;
 }
 
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
+const POLL_INTERVAL_MS = 30_000;
 
 function timeAgo(date: Date): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -53,8 +53,10 @@ function TimeAgo({ date }: { date: Date }) {
 export default function LiveGameList({
   initialGames,
   sportKey,
-  book,
 }: LiveGameListProps) {
+  const searchParams = useSearchParams();
+  const book = searchParams.get("book") ?? undefined;
+
   const [games, setGames] = useState<Game[]>(initialGames);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -75,6 +77,7 @@ export default function LiveGameList({
       }
     };
 
+    fetchGames(); // fetch immediately when the sport or book changes
     const interval = setInterval(fetchGames, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [sportKey, book]);

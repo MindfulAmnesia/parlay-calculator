@@ -84,11 +84,7 @@ export default async function SportPage({
 
         <BookSelector currentBook={book} />
 
-        <LiveGameList
-          initialGames={initialGames}
-          sportKey={key}
-          book={book}
-        />
+        <LiveGameList initialGames={initialGames} sportKey={key} />
       </div>
     </main>
   );
