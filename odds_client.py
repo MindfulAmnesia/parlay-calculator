@@ -72,6 +72,29 @@ def get_moneyline_odds(sport_key: str, regions: str = "us") -> list[dict]:
     return get_odds(sport_key, markets=["h2h"], regions=regions)
 
 
+def get_event_props(
+    sport_key: str,
+    event_id: str,
+    markets: list[str],
+    regions: str = "us",
+) -> dict:
+    """Fetch player props for one specific event/game.
+
+    Different endpoint pattern from get_odds: this returns ONE event
+    (a dict) rather than a list of events.
+
+    Each market costs 1 credit per region. Typical call: 4-5 credits.
+    """
+    return _get(
+        f"/sports/{sport_key}/events/{event_id}/odds",
+        params={
+            "regions": regions,
+            "markets": ",".join(markets),
+            "oddsFormat": "american",
+        },
+    )
+
+
 def _market_outcomes(event: dict, book_key: str, market_key: str) -> list[dict]:
     """Return raw outcomes list for one (book, market) combo, or [] if absent."""
     for book in event.get("bookmakers", []):
@@ -142,6 +165,9 @@ _odds_cache_lock = Lock()
 _sports_cache: TTLCache = TTLCache(maxsize=2, ttl=300)
 _sports_cache_lock = Lock()
 
+_props_cache: TTLCache = TTLCache(maxsize=128, ttl=60)
+_props_cache_lock = Lock()
+
 
 def get_odds_cached(
     sport_key: str,
@@ -183,3 +209,26 @@ def list_sports_cached(active_only: bool = True) -> list[dict]:
         _sports_cache[cache_key] = sports
 
     return sports
+
+def get_event_props_cached(
+    sport_key: str,
+    event_id: str,
+    markets: list[str],
+    regions: str = "us",
+) -> dict:
+    """Cached wrapper around get_event_props. TTL: 60 seconds."""
+    cache_key = (sport_key, event_id, tuple(markets), regions)
+
+    with _props_cache_lock:
+        if cache_key in _props_cache:
+            print(f"[cache] HIT  props {cache_key}")
+            return _props_cache[cache_key]
+
+    print(f"[cache] MISS props {cache_key}")
+    data = get_event_props(sport_key, event_id, markets=markets, regions=regions)
+
+    with _props_cache_lock:
+        _props_cache[cache_key] = data
+
+    return data
+

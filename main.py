@@ -17,6 +17,7 @@ from odds_client import (
     book_spreads,
     book_totals,
     consensus_moneyline,
+    get_event_props_cached,
     get_odds_cached,
     list_sports_cached,
 )
@@ -29,11 +30,9 @@ from parlay import (
 app = FastAPI(
     title="Parlay Calculator API",
     description="Live joint probability for sports betting parlays.",
-    version="0.2.0",
+    version="0.3.0",
 )
 
-# Comma-separated list of permitted frontend origins.
-# Local dev defaults to localhost:3000; production sets this via env var.
 _frontend_urls_env = os.getenv("FRONTEND_URLS", "http://localhost:3000")
 _allow_origins = [u.strip() for u in _frontend_urls_env.split(",") if u.strip()]
 
@@ -44,6 +43,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Player-prop market keys, per sport. Each entry costs 1 quota credit per
+# region per call. Coverage varies by sport; if the API has no data for a
+# given (sport, market) the response simply omits it.
+MARKETS_BY_SPORT: dict[str, list[str]] = {
+    "baseball_mlb": [
+        "batter_hits",
+        "batter_home_runs",
+        "batter_total_bases",
+        "batter_rbis",
+        "pitcher_strikeouts",
+    ],
+    "americanfootball_nfl": [
+        "player_pass_yds",
+        "player_pass_tds",
+        "player_rush_yds",
+        "player_reception_yds",
+        "player_anytime_td",
+    ],
+    "basketball_nba": [
+        "player_points",
+        "player_rebounds",
+        "player_assists",
+        "player_threes",
+    ],
+    "icehockey_nhl": [
+        "player_goals",
+        "player_assists",
+        "player_points",
+        "player_total_saves",
+    ],
+}
 
 
 # ---------- Pydantic models ----------
@@ -181,6 +213,70 @@ def get_event_odds(sport_key: str, book: str | None = None) -> list[dict]:
     return output
 
 
+@app.get("/odds/{sport_key}/events/{event_id}/props")
+def get_event_props_endpoint(
+    sport_key: str,
+    event_id: str,
+    book: str = "draftkings",
+) -> dict:
+    """Return player-prop outcomes for one specific game.
+
+    Defaults to DraftKings since 'consensus' doesn't apply meaningfully to
+    player props (different books may not cover the same players or markets).
+    """
+    markets = MARKETS_BY_SPORT.get(sport_key, [])
+    if not markets:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Player props not configured for sport: {sport_key}",
+        )
+
+    try:
+        data = get_event_props_cached(
+            sport_key,
+            event_id,
+            markets=markets,
+        )
+    except OddsAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    book_lower = book.lower()
+    available_books: set[str] = set()
+    props: list[dict] = []
+
+    for bookmaker in data.get("bookmakers", []):
+        book_key = bookmaker.get("key")
+        if book_key:
+            available_books.add(book_key)
+
+        if book_key != book_lower:
+            continue
+
+        for market in bookmaker.get("markets", []):
+            market_key = market.get("key", "")
+            for outcome in market.get("outcomes", []):
+                price = outcome.get("price")
+                props.append({
+                    "market": market_key,
+                    "player": outcome.get("description") or "",
+                    "side": outcome.get("name") or "",
+                    "price": int(price) if price is not None else None,
+                    "point": outcome.get("point"),
+                    "book": book_key,
+                })
+
+    return {
+        "event_id": event_id,
+        "sport_key": sport_key,
+        "home_team": data.get("home_team"),
+        "away_team": data.get("away_team"),
+        "commence_time": data.get("commence_time"),
+        "book": book_lower,
+        "available_books": sorted(available_books),
+        "props": props,
+    }
+
+
 @app.post("/parlay")
 def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
     if not request.legs:
@@ -232,3 +328,4 @@ def get_parlay(parlay_id: int) -> SavedParlay:
 @app.get("/parlays")
 def get_parlays(limit: int = 50) -> list[SavedParlaySummary]:
     return [SavedParlaySummary(**p) for p in db_list_parlays(limit=limit)]
+

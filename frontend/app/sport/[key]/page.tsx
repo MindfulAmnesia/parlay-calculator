@@ -1,7 +1,7 @@
 import Link from "next/link";
-import GameCard from "@/components/GameCard";
 import { API_URL } from "@/lib/api";
 import BookSelector from "./BookSelector";
+import LiveGameList from "@/components/LiveGameList";
 
 interface Prices {
   [team: string]: number;
@@ -66,7 +66,7 @@ export default async function SportPage({
   const { key } = await params;
   const { book } = await searchParams;
 
-  const [{ title, description }, games] = await Promise.all([
+  const [{ title, description }, initialGames] = await Promise.all([
     fetchSportMeta(key),
     fetchGames(key, book),
   ]);
@@ -81,34 +81,14 @@ export default async function SportPage({
         {description && (
           <p className="text-sm text-slate-500 mb-2">{description}</p>
         )}
-        <p className="text-slate-400 mb-6">
-          {games.length} upcoming game{games.length === 1 ? "" : "s"}
-        </p>
 
         <BookSelector currentBook={book} />
 
-        {games.length === 0 ? (
-          <p className="text-slate-500 italic">
-            No upcoming games for this sport.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {games.map((game) => (
-              <GameCard
-                key={game.id}
-                gameId={game.id}
-                homeTeam={game.home_team}
-                awayTeam={game.away_team}
-                commenceTime={game.commence_time}
-                prices={game.prices}
-                spreads={game.spreads}
-                totals={game.totals}
-                source={game.source}
-                sportKey={key}
-              />
-            ))}
-          </ul>
-        )}
+        <LiveGameList
+          initialGames={initialGames}
+          sportKey={key}
+          book={book}
+        />
       </div>
     </main>
   );
