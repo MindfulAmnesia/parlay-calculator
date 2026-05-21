@@ -1,6 +1,7 @@
 "use client";
 
-import { useParlay } from "@/lib/ParlayContext";
+import Link from "next/link";
+import { ParlayLeg, useParlay } from "@/lib/ParlayContext";
 import { calculateVig } from "@/lib/parlay-math";
 
 interface Prices {
@@ -226,7 +227,7 @@ export default function GameCard({
         </div>
       )}
 
-      {/* Total */}
+{/* Total */}
       {totals.length === 2 && (
         <div>
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
@@ -239,6 +240,13 @@ export default function GameCard({
           </div>
         </div>
       )}
+
+      <Link
+        href={`/sport/${sportKey}/event/${gameId}`}
+        className="block mt-3 pt-3 border-t border-slate-700 text-center text-sm text-sky-400 hover:text-sky-300"
+      >
+        Player Props →
+      </Link>
     </li>
   );
 }

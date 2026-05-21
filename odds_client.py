@@ -231,4 +231,3 @@ def get_event_props_cached(
         _props_cache[cache_key] = data
 
     return data
-
