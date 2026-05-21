@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ParlayLeg, useParlay } from "@/lib/ParlayContext";
+import { useParlay } from "@/lib/ParlayContext";
 import { calculateVig } from "@/lib/parlay-math";
+import AlternateLinesPicker from "@/components/AlternateLinesPicker";
 
 interface Prices {
   [team: string]: number;
@@ -78,8 +80,9 @@ export default function GameCard({
 }: GameCardProps) {
   const { addLeg, removeLeg, hasLeg } = useParlay();
   const vig = calculateVig(prices);
+  const [showAlts, setShowAlts] = useState(false);
 
-  // Generic pickable button used by all three markets
+  // Generic pickable button used by all three featured markets
   function PickButton({
     legId,
     label,
@@ -227,7 +230,7 @@ export default function GameCard({
         </div>
       )}
 
-{/* Total */}
+      {/* Total */}
       {totals.length === 2 && (
         <div>
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
@@ -238,6 +241,29 @@ export default function GameCard({
               renderPointOutcome("total", t, totalCounterpart(t.name)),
             )}
           </div>
+        </div>
+      )}
+
+      {/* Alternate lines — only when a specific book is selected, since
+          'consensus' has no point-bearing data and the endpoint needs a book */}
+      {source !== "consensus" && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowAlts((v) => !v)}
+            className="text-sm text-sky-400 hover:text-sky-300"
+          >
+            {showAlts ? "Hide alternate lines ▴" : "Show alternate lines ▾"}
+          </button>
+          {showAlts && (
+            <AlternateLinesPicker
+              sportKey={sportKey}
+              gameId={gameId}
+              book={source}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+            />
+          )}
         </div>
       )}
 
