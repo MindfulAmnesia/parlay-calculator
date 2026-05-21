@@ -62,7 +62,12 @@ export default async function EventPage({
           Player Props • {data.book}
         </p>
 
-        <EventPropsList props={data.props} eventId={event_id} sportKey={key} />
+        <EventPropsList
+          props={data.props}
+          eventId={event_id}
+          sportKey={key}
+          book={data.book}
+        />
       </div>
     </main>
   );

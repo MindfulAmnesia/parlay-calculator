@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useParlay } from "@/lib/ParlayContext";
+import AlternatePropsPicker from "@/components/AlternatePropsPicker";
 
 interface Prop {
   market: string;
@@ -15,9 +17,9 @@ interface EventPropsListProps {
   props: Prop[];
   eventId: string;
   sportKey: string;
+  book: string;
 }
 
-// Friendly display names for the raw market keys from the API
 const MARKET_NAMES: Record<string, string> = {
   batter_hits: "Hits",
   batter_home_runs: "Home Runs",
@@ -69,8 +71,10 @@ export default function EventPropsList({
   props,
   eventId,
   sportKey,
+  book,
 }: EventPropsListProps) {
   const { addLeg, removeLeg, hasLeg } = useParlay();
+  const [showAlts, setShowAlts] = useState(false);
 
   if (props.length === 0) {
     return (
@@ -83,13 +87,7 @@ export default function EventPropsList({
 
   const grouped = groupProps(props);
 
-  function PropButton({
-    prop,
-    counterpart,
-  }: {
-    prop: Prop;
-    counterpart?: Prop;
-  }) {
+  function PropButton({ prop, counterpart }: { prop: Prop; counterpart?: Prop }) {
     if (prop.price === null) return null;
     const legId = `${eventId}:prop:${prop.market}:${prop.player}:${prop.side}`;
     const selected = hasLeg(legId);
@@ -156,6 +154,24 @@ export default function EventPropsList({
           </ul>
         </div>
       ))}
+
+      {/* Alternate / milestone prop lines — fetched on demand */}
+      <div className="pt-2">
+        <button
+          type="button"
+          onClick={() => setShowAlts((v) => !v)}
+          className="text-sm text-sky-400 hover:text-sky-300"
+        >
+          {showAlts ? "Hide alternate lines ▴" : "Show alternate lines ▾"}
+        </button>
+        {showAlts && (
+          <AlternatePropsPicker
+            sportKey={sportKey}
+            eventId={eventId}
+            book={book}
+          />
+        )}
+      </div>
     </div>
   );
 }

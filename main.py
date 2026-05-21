@@ -32,7 +32,7 @@ from parlay import (
 app = FastAPI(
     title="Parlay Calculator API",
     description="Live joint probability for sports betting parlays.",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 _frontend_urls_env = os.getenv("FRONTEND_URLS", "http://localhost:3000")
@@ -76,6 +76,39 @@ MARKETS_BY_SPORT: dict[str, list[str]] = {
         "player_assists",
         "player_points",
         "player_total_saves",
+    ],
+}
+
+
+# Alternate (milestone / "X+") player-prop market keys, per sport. Same base
+# markets as above with the API's "_alternate" suffix. Note NFL anytime_td has
+# no alternate ladder (it's a yes/no market), so it's omitted here. These are
+# fetched on demand only, when a user expands the alternate-lines picker.
+ALT_MARKETS_BY_SPORT: dict[str, list[str]] = {
+    "baseball_mlb": [
+        "batter_hits_alternate",
+        "batter_home_runs_alternate",
+        "batter_total_bases_alternate",
+        "batter_rbis_alternate",
+        "pitcher_strikeouts_alternate",
+    ],
+    "americanfootball_nfl": [
+        "player_pass_yds_alternate",
+        "player_pass_tds_alternate",
+        "player_rush_yds_alternate",
+        "player_reception_yds_alternate",
+    ],
+    "basketball_nba": [
+        "player_points_alternate",
+        "player_rebounds_alternate",
+        "player_assists_alternate",
+        "player_threes_alternate",
+    ],
+    "icehockey_nhl": [
+        "player_goals_alternate",
+        "player_assists_alternate",
+        "player_points_alternate",
+        "player_total_saves_alternate",
     ],
 }
 
@@ -362,6 +395,74 @@ def get_event_alternates_endpoint(
     }
 
 
+@app.get("/odds/{sport_key}/events/{event_id}/altprops")
+def get_event_alt_props_endpoint(
+    sport_key: str,
+    event_id: str,
+    book: str = "draftkings",
+) -> dict:
+    """Return alternate / milestone player-prop lines for one game.
+
+    Mirrors the /props endpoint but fetches the '_alternate' market keys
+    (e.g. batter_home_runs_alternate) — the milestone ladders books publish
+    (1+, 2+, 3+ home runs, each at its own price). On-demand only: called
+    when a user expands the alternate-lines picker on the props page.
+
+    The '_alternate' suffix is stripped from each returned market so the
+    frontend can reuse the same friendly market names as standard props.
+    """
+    markets = ALT_MARKETS_BY_SPORT.get(sport_key, [])
+    if not markets:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Alternate player props not configured for sport: {sport_key}",
+        )
+
+    try:
+        data = get_event_props_cached(sport_key, event_id, markets=markets)
+    except OddsAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    book_lower = book.lower()
+    available_books: set[str] = set()
+    props: list[dict] = []
+    suffix = "_alternate"
+
+    for bookmaker in data.get("bookmakers", []):
+        book_key = bookmaker.get("key")
+        if book_key:
+            available_books.add(book_key)
+
+        if book_key != book_lower:
+            continue
+
+        for market in bookmaker.get("markets", []):
+            market_key = market.get("key", "")
+            if market_key.endswith(suffix):
+                market_key = market_key[: -len(suffix)]
+            for outcome in market.get("outcomes", []):
+                price = outcome.get("price")
+                props.append({
+                    "market": market_key,
+                    "player": outcome.get("description") or "",
+                    "side": outcome.get("name") or "",
+                    "price": int(price) if price is not None else None,
+                    "point": outcome.get("point"),
+                    "book": book_key,
+                })
+
+    return {
+        "event_id": event_id,
+        "sport_key": sport_key,
+        "home_team": data.get("home_team"),
+        "away_team": data.get("away_team"),
+        "commence_time": data.get("commence_time"),
+        "book": book_lower,
+        "available_books": sorted(available_books),
+        "props": props,
+    }
+
+
 @app.post("/parlay")
 def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
     if not request.legs:
@@ -413,4 +514,3 @@ def get_parlay(parlay_id: int) -> SavedParlay:
 @app.get("/parlays")
 def get_parlays(limit: int = 50) -> list[SavedParlaySummary]:
     return [SavedParlaySummary(**p) for p in db_list_parlays(limit=limit)]
-
