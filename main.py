@@ -13,6 +13,8 @@ from db import load_parlay as db_load_parlay
 from db import save_parlay as db_save_parlay
 from odds_client import (
     OddsAPIError,
+    book_alt_spreads,
+    book_alt_totals,
     book_moneyline,
     book_spreads,
     book_totals,
@@ -30,7 +32,7 @@ from parlay import (
 app = FastAPI(
     title="Parlay Calculator API",
     description="Live joint probability for sports betting parlays.",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 _frontend_urls_env = os.getenv("FRONTEND_URLS", "http://localhost:3000")
@@ -160,6 +162,25 @@ def _compute_probabilities(legs: list[ParlayLeg]) -> tuple[float, float | None]:
     return raw, fair
 
 
+def _merge_lines(main: list[dict], alt: list[dict]) -> list[dict]:
+    """Combine featured + alternate lines into one ladder.
+
+    Dedupes by (name, point) so a line that appears in both the featured
+    and alternate markets isn't listed twice, then sorts by name and point
+    so each team's (or Over/Under's) ladder is in ascending order.
+    """
+    seen: set[tuple[str, float]] = set()
+    combined: list[dict] = []
+    for entry in [*main, *alt]:
+        key = (entry["name"], entry["point"])
+        if key in seen:
+            continue
+        seen.add(key)
+        combined.append(entry)
+    combined.sort(key=lambda e: (e["name"], e["point"]))
+    return combined
+
+
 # ---------- Routes ----------
 
 @app.get("/")
@@ -274,6 +295,70 @@ def get_event_props_endpoint(
         "book": book_lower,
         "available_books": sorted(available_books),
         "props": props,
+    }
+
+
+@app.get("/odds/{sport_key}/events/{event_id}/alternates")
+def get_event_alternates_endpoint(
+    sport_key: str,
+    event_id: str,
+    book: str = "draftkings",
+) -> dict:
+    """Return the full ladder of spread/total lines for one game.
+
+    Fetches the featured lines (spreads, totals) AND the alternate ladders
+    (alternate_spreads, alternate_totals) in a single per-event call, then
+    merges them so the user sees the main line plus every published
+    alternate as one continuous set of choices.
+
+    On-demand only: called when a user expands a game's line picker, not on
+    the main listing — so the extra markets (~4 credits per fresh call, per
+    book) are spent only when actually needed. Cached 60s for repeat opens.
+
+    Defaults to DraftKings; 'consensus' doesn't apply to point-bearing
+    markets because the points differ across books.
+    """
+    book_lower = book.lower()
+
+    try:
+        # get_event_props_cached is the generic per-event odds fetcher;
+        # here we point it at the spread/total markets instead of props.
+        data = get_event_props_cached(
+            sport_key,
+            event_id,
+            markets=[
+                "spreads",
+                "totals",
+                "alternate_spreads",
+                "alternate_totals",
+            ],
+        )
+    except OddsAPIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    available_books = sorted(
+        b["key"] for b in data.get("bookmakers", []) if b.get("key")
+    )
+
+    spreads = _merge_lines(
+        book_spreads(data, book_lower),
+        book_alt_spreads(data, book_lower),
+    )
+    totals = _merge_lines(
+        book_totals(data, book_lower),
+        book_alt_totals(data, book_lower),
+    )
+
+    return {
+        "event_id": event_id,
+        "sport_key": sport_key,
+        "home_team": data.get("home_team"),
+        "away_team": data.get("away_team"),
+        "commence_time": data.get("commence_time"),
+        "book": book_lower,
+        "available_books": available_books,
+        "spreads": spreads,
+        "totals": totals,
     }
 
 

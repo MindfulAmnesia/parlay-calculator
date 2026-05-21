@@ -78,12 +78,13 @@ def get_event_props(
     markets: list[str],
     regions: str = "us",
 ) -> dict:
-    """Fetch player props for one specific event/game.
+    """Fetch additional markets for one specific event/game.
 
-    Different endpoint pattern from get_odds: this returns ONE event
-    (a dict) rather than a list of events.
+    Despite the name, this is a generic per-event odds fetcher: it works
+    for any "additional" markets, including player props AND alternate
+    spreads/totals. Returns ONE event (a dict), not a list.
 
-    Each market costs 1 credit per region. Typical call: 4-5 credits.
+    Each market costs 1 credit per region.
     """
     return _get(
         f"/sports/{sport_key}/events/{event_id}/odds",
@@ -129,6 +130,42 @@ def book_spreads(event: dict, book_key: str) -> list[dict]:
 def book_totals(event: dict, book_key: str) -> list[dict]:
     """Return [{name, price, point}, ...] for one book's totals, or []."""
     outcomes = _market_outcomes(event, book_key, "totals")
+    return [
+        {
+            "name": o["name"],
+            "price": int(o["price"]),
+            "point": float(o["point"]),
+        }
+        for o in outcomes
+        if "price" in o and "point" in o
+    ]
+
+
+def book_alt_spreads(event: dict, book_key: str) -> list[dict]:
+    """Return [{name, price, point}, ...] for one book's ALTERNATE spreads.
+
+    Same shape as book_spreads, but reads the 'alternate_spreads' market —
+    the ladder of additional spread points the book has published.
+    """
+    outcomes = _market_outcomes(event, book_key, "alternate_spreads")
+    return [
+        {
+            "name": o["name"],
+            "price": int(o["price"]),
+            "point": float(o["point"]),
+        }
+        for o in outcomes
+        if "price" in o and "point" in o
+    ]
+
+
+def book_alt_totals(event: dict, book_key: str) -> list[dict]:
+    """Return [{name, price, point}, ...] for one book's ALTERNATE totals.
+
+    Same shape as book_totals, but reads the 'alternate_totals' market —
+    the ladder of additional total points the book has published.
+    """
+    outcomes = _market_outcomes(event, book_key, "alternate_totals")
     return [
         {
             "name": o["name"],
@@ -210,13 +247,19 @@ def list_sports_cached(active_only: bool = True) -> list[dict]:
 
     return sports
 
+
 def get_event_props_cached(
     sport_key: str,
     event_id: str,
     markets: list[str],
     regions: str = "us",
 ) -> dict:
-    """Cached wrapper around get_event_props. TTL: 60 seconds."""
+    """Cached wrapper around get_event_props. TTL: 60 seconds.
+
+    Generic per-event fetch — used for both player props and alternate
+    spreads/totals. The markets tuple is part of the cache key, so props
+    and alternates cache independently of each other.
+    """
     cache_key = (sport_key, event_id, tuple(markets), regions)
 
     with _props_cache_lock:
