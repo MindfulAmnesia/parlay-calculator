@@ -4,10 +4,12 @@ main.py — FastAPI HTTP service exposing the parlay calculator.
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from auth_routes import get_current_user
+from auth_routes import router as auth_router
 from db import list_parlays as db_list_parlays
 from db import load_parlay as db_load_parlay
 from db import save_parlay as db_save_parlay
@@ -45,7 +47,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 
+# Sports shown on the homepage. The Odds API tracks far more than we want to
+# launch with; this allowlist narrows /sports to our chosen slate. A sport
+# only appears when the API has upcoming games for it (i.e. it's in season),
+# so off-season sports simply won't show until their schedule resumes.
+# To add a sport back later, add its exact key here. To find a key, hit
+# /sports without filtering, or check The Odds API docs.
+ALLOWED_SPORT_KEYS: set[str] = {
+    "americanfootball_nfl",            # NFL — regular season + playoffs
+    "americanfootball_nfl_preseason",  # NFL — preseason (separate key)
+    "americanfootball_ncaaf",          # College Football
+    "icehockey_nhl",                   # NHL
+    "basketball_nba",                  # NBA
+    "baseball_mlb",                    # MLB
+    "basketball_wnba",                 # WNBA
+    "soccer_fifa_world_cup",           # FIFA World Cup 2026
+}
 
 # Player-prop market keys, per sport. Each entry costs 1 quota credit per
 # region per call. Coverage varies by sport; if the API has no data for a
@@ -224,9 +243,10 @@ def root() -> dict:
 @app.get("/sports")
 def get_sports() -> list[dict]:
     try:
-        return list_sports_cached()
+        sports = list_sports_cached()
     except OddsAPIError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    return [s for s in sports if s.get("key") in ALLOWED_SPORT_KEYS]
 
 
 @app.get("/odds/{sport_key}")
@@ -480,7 +500,10 @@ def calculate_parlay(request: ParlayRequest) -> ParlayResponse:
 
 
 @app.post("/parlay/save", status_code=201)
-def post_save_parlay(request: SaveParlayRequest) -> SaveParlayResponse:
+def post_save_parlay(
+    request: SaveParlayRequest,
+    current_user: dict = Depends(get_current_user),
+) -> SaveParlayResponse:
     if not request.legs:
         raise HTTPException(status_code=400, detail="Parlay must contain at least one leg.")
 
@@ -488,6 +511,7 @@ def post_save_parlay(request: SaveParlayRequest) -> SaveParlayResponse:
     legs_for_db = [leg.model_dump() for leg in request.legs]
     parlay_id = db_save_parlay(
         legs=legs_for_db,
+        user_id=current_user["id"],
         sport_key=request.sport_key,
         book=request.book,
         raw_probability=raw,
@@ -504,13 +528,23 @@ def post_save_parlay(request: SaveParlayRequest) -> SaveParlayResponse:
 
 
 @app.get("/parlay/{parlay_id}")
-def get_parlay(parlay_id: int) -> SavedParlay:
-    parlay = db_load_parlay(parlay_id)
+def get_parlay(
+    parlay_id: int,
+    current_user: dict = Depends(get_current_user),
+) -> SavedParlay:
+    parlay = db_load_parlay(parlay_id, current_user["id"])
     if parlay is None:
         raise HTTPException(status_code=404, detail=f"Parlay {parlay_id} not found.")
     return SavedParlay(**parlay)
 
 
 @app.get("/parlays")
-def get_parlays(limit: int = 50) -> list[SavedParlaySummary]:
-    return [SavedParlaySummary(**p) for p in db_list_parlays(limit=limit)]
+def get_parlays(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user),
+) -> list[SavedParlaySummary]:
+    return [
+        SavedParlaySummary(**p)
+        for p in db_list_parlays(current_user["id"], limit=limit)
+    ]
+

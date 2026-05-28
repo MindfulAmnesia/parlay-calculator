@@ -1,15 +1,21 @@
 """Tests for main.py FastAPI service. Uses TestClient — no real HTTP server."""
 
-from unittest.mock import patch
+from unittest.mock import patch  # noqa: I001
 
 import pytest
 from fastapi.testclient import TestClient
 
+from auth_routes import get_current_user
 from main import app
 from odds_client import OddsAPIError
 
-client = TestClient(app)
+# Override auth for tests: pretend a logged-in user with id=1.
+def _fake_current_user() -> dict:
+    return {"id": 1, "email": "test@example.com", "tier": "free", "created_at": None}
 
+app.dependency_overrides[get_current_user] = _fake_current_user
+
+client = TestClient(app)
 
 SAMPLE_EVENT = {
     "id": "abc123",
@@ -40,12 +46,10 @@ SAMPLE_EVENT = {
     ],
 }
 
-
 def test_root_returns_friendly_message():
     response = client.get("/")
     assert response.status_code == 200
     assert "Parlay Calculator API" in response.json()["message"]
-
 
 @patch("main.list_sports_cached")
 def test_get_sports_returns_list(mock_list_sports):
@@ -59,7 +63,6 @@ def test_get_sports_returns_list(mock_list_sports):
     assert len(sports) == 2
     assert sports[0]["key"] == "basketball_nba"
 
-
 @patch("main.list_sports_cached")
 def test_get_sports_handles_upstream_error(mock_list_sports):
     mock_list_sports.side_effect = OddsAPIError("Upstream API timed out")
@@ -67,6 +70,26 @@ def test_get_sports_handles_upstream_error(mock_list_sports):
     assert response.status_code == 502
     assert "Upstream API timed out" in response.json()["detail"]
 
+@patch("main.list_sports_cached")
+def test_get_sports_filters_to_allowlist(mock_list_sports):
+    # Backend returns a mix of allowlisted and non-allowlisted sports;
+    # the endpoint must return only the allowlisted ones.
+    mock_list_sports.return_value = [
+        {"key": "baseball_mlb",                "active": True, "title": "MLB"},
+        {"key": "basketball_nba",              "active": True, "title": "NBA"},
+        {"key": "mma_mixed_martial_arts",      "active": True, "title": "MMA"},
+        {"key": "cricket_ipl",                 "active": True, "title": "IPL"},
+        {"key": "americanfootball_nfl_preseason", "active": True, "title": "NFL Preseason"},
+    ]
+    response = client.get("/sports")
+    assert response.status_code == 200
+    keys = [s["key"] for s in response.json()]
+    assert "baseball_mlb" in keys
+    assert "basketball_nba" in keys
+    assert "americanfootball_nfl_preseason" in keys
+    assert "mma_mixed_martial_arts" not in keys
+    assert "cricket_ipl" not in keys
+    assert len(keys) == 3
 
 @patch("main.get_odds_cached")
 def test_get_odds_consensus(mock_get_odds_cached):
@@ -78,7 +101,6 @@ def test_get_odds_consensus(mock_get_odds_cached):
     assert event["home_team"] == "Yankees"
     assert event["prices"]["Yankees"] == -147
 
-
 @patch("main.get_odds_cached")
 def test_get_odds_specific_book(mock_get_odds_cached):
     mock_get_odds_cached.return_value = [SAMPLE_EVENT]
@@ -87,7 +109,6 @@ def test_get_odds_specific_book(mock_get_odds_cached):
     event = response.json()[0]
     assert event["source"] == "draftkings"
     assert event["prices"]["Yankees"] == -150
-
 
 @patch("main.get_odds_cached")
 def test_get_odds_unknown_book_returns_empty_prices(mock_get_odds_cached):
@@ -157,6 +178,7 @@ def test_post_parlay_save_returns_id_and_probabilities(mock_save):
     assert data["id"] == 42
     assert data["raw_probability"] > 0
     call_kwargs = mock_save.call_args.kwargs
+    assert call_kwargs["user_id"] == 1
     assert call_kwargs["sport_key"] == "baseball_mlb"
     assert call_kwargs["book"] == "draftkings"
     assert len(call_kwargs["legs"]) == 2
