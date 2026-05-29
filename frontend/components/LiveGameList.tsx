@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import GameCard from "@/components/GameCard";
 import { API_URL } from "@/lib/api";
 
+const STORAGE_KEY = "parlay-calculator:book";
+
 interface Prices {
   [team: string]: number;
 }
@@ -55,7 +57,24 @@ export default function LiveGameList({
   sportKey,
 }: LiveGameListProps) {
   const searchParams = useSearchParams();
-  const book = searchParams.get("book") ?? undefined;
+
+  // Prefer the book in the URL; if absent, fall back to the saved choice so
+  // games load for the right book even before the selector's redirect lands.
+  const urlBook = searchParams.get("book") ?? undefined;
+  const [book, setBook] = useState<string | undefined>(urlBook);
+
+  useEffect(() => {
+    if (urlBook) {
+      setBook(urlBook);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      setBook(saved ?? undefined);
+    } catch {
+      setBook(undefined);
+    }
+  }, [urlBook]);
 
   const [games, setGames] = useState<Game[]>(initialGames);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());

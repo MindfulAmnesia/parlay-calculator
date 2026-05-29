@@ -136,6 +136,7 @@ export default function AlternatePropsPicker({
   // data is non-null past this point; capture it so the guarantee carries
   // into the nested functions below (TypeScript won't narrow `data` itself
   // inside a closure, but a fresh const keeps its non-null type).
+
   const propsData = data;
 
   const grouped = groupAltProps(propsData.props);
@@ -143,6 +144,7 @@ export default function AlternatePropsPicker({
 
   // Counterpart: same player + market + point, opposite side. Usually absent
   // for milestone (Over-only) lines, in which case the leg shows raw odds.
+  
   const counterpartFor = (p: Prop): Prop | undefined => {
     const other = p.side.toLowerCase() === "over" ? "under" : "over";
     return propsData.props.find(

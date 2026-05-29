@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { API_URL } from "@/lib/api";
+import { API_URL, authHeaders } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 import { useParlay } from "@/lib/ParlayContext";
 import { impliedToAmerican, parlayProbability } from "@/lib/parlay-math";
 
@@ -22,6 +23,7 @@ interface SaveState {
 
 export default function ParlayPanel() {
   const { legs, removeLeg, clear } = useParlay();
+  const { user } = useAuth();
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
   if (legs.length === 0) {
@@ -46,9 +48,12 @@ export default function ParlayPanel() {
     try {
       const res = await fetch(`${API_URL}/parlay/save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(true),
         body: JSON.stringify(body),
       });
+      if (res.status === 401) {
+        throw new Error("Your session expired. Please log in again.");
+      }
       if (!res.ok) {
         throw new Error(`Backend returned ${res.status}`);
       }
@@ -128,39 +133,50 @@ export default function ParlayPanel() {
       </div>
 
       <div className="mt-4 pt-3 border-t border-slate-700">
-        {saveState.status === "idle" && (
-          <button
-            onClick={handleSave}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-medium transition"
+        {!user ? (
+          <Link
+            href="/login"
+            className="block w-full text-center bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-medium transition"
           >
-            Save Parlay
-          </button>
-        )}
-        {saveState.status === "saving" && (
-          <button
-            disabled
-            className="w-full bg-slate-600 text-slate-400 py-2 rounded font-medium cursor-not-allowed"
-          >
-            Saving...
-          </button>
-        )}
-        {saveState.status === "saved" && (
-          <div className="text-center text-sm">
-            <div className="text-emerald-300">
-              ✓ Saved as parlay #{saveState.parlayId}
-            </div>
-            <Link
-              href="/parlays"
-              className="inline-block mt-1 text-xs text-slate-400 hover:text-slate-200 underline"
-            >
-              View all saved parlays →
-            </Link>
-          </div>
-        )}
-        {saveState.status === "error" && (
-          <div className="text-center text-sm text-red-300">
-            Save failed: {saveState.error}
-          </div>
+            Log in to save
+          </Link>
+        ) : (
+          <>
+            {saveState.status === "idle" && (
+              <button
+                onClick={handleSave}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded font-medium transition"
+              >
+                Save Parlay
+              </button>
+            )}
+            {saveState.status === "saving" && (
+              <button
+                disabled
+                className="w-full bg-slate-600 text-slate-400 py-2 rounded font-medium cursor-not-allowed"
+              >
+                Saving...
+              </button>
+            )}
+            {saveState.status === "saved" && (
+              <div className="text-center text-sm">
+                <div className="text-emerald-300">
+                  ✓ Saved as parlay #{saveState.parlayId}
+                </div>
+                <Link
+                  href="/parlays"
+                  className="inline-block mt-1 text-xs text-slate-400 hover:text-slate-200 underline"
+                >
+                  View all saved parlays →
+                </Link>
+              </div>
+            )}
+            {saveState.status === "error" && (
+              <div className="text-center text-sm text-red-300">
+                Save failed: {saveState.error}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
